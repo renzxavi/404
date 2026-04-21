@@ -1,34 +1,30 @@
-// src/components/layout/CategoryTabs.tsx
 "use client";
 
-import { useState } from "react";
-import { MinusCircle, PauseCircle, XCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ArrowLeftCircle, PauseCircle, ArrowRightCircle } from "lucide-react";
 
 const categories = [
-  { id: "no-camina", label: "Acá no camina",  icon: MinusCircle },
-  { id: "necesito",  label: "Lo necesito acá", icon: PauseCircle },
-  { id: "no-existe", label: "Cómo no existe",  icon: XCircle },
+  { id: "wont-work", label: "Won't work here", icon: ArrowLeftCircle },
+  { id: "need-it",   label: "Need it here",    icon: PauseCircle },
+  { id: "missing",   label: "Why is it missing", icon: ArrowRightCircle },
 ];
 
 export default function CategoryTabs() {
-  const [active, setActive] = useState("no-camina");
   return (
-    <div className="grid grid-cols-3 border-b border-border bg-background">
+    <div className="grid grid-cols-3 bg-black w-full divide-x divide-zinc-800">
       {categories.map(({ id, label, icon: Icon }) => (
-        <button
+        <div
           key={id}
-          onClick={() => setActive(id)}
-          className={cn(
-            "flex items-center justify-center gap-2 py-3 text-xs font-medium uppercase tracking-wider transition-colors border-r border-border last:border-r-0",
-            active === id
-              ? "text-foreground border-b-2 border-b-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          )}
+          className="flex flex-col items-center justify-center gap-2 py-6 px-2 text-white"
         >
-          <Icon size={14} strokeWidth={2} />
-          {label}
-        </button>
+          <Icon 
+            size={20} 
+            strokeWidth={1.5} 
+            className="opacity-80" 
+          />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-center leading-tight">
+            {label}
+          </span>
+        </div>
       ))}
     </div>
   );
