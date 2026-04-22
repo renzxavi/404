@@ -19,9 +19,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={syne.variable}>
-      <body className="bg-background text-foreground antialiased">
+      <body className="bg-background text-foreground antialiased overflow-hidden" style={{ height: "100dvh" }}>
         <Navbar />
-        <main className="min-h-[calc(100dvh-56px-64px)]">{children}</main>
+        <main style={{ height: "calc(100dvh - 40px - 64px)" }}>
+          {children}
+        </main>
         <TabBar />
       </body>
     </html>

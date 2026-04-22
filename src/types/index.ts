@@ -22,7 +22,7 @@ export interface Vote {
   product_id: string;
   user_id: string | null;
   session_id: string;
-  value: 1 | -1;
+  value: 1 | -1 | 2; // 1=quiero, -1=paso, 2=lo necesito
   weight: number;
 }
 

@@ -1,15 +1,14 @@
-// src/components/product/SwipeCard.tsx
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { ThumbsUp, ThumbsDown, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { Product } from "@/types/index";
 import { cn } from "@/lib/utils";
 import DemandMeter from "./DemandMeter";
 
-const LONG_PRESS_MS = 700;
-type HoldType = "like" | "dislike" | "need" | null;
+const LONG_PRESS_MS = 600;
+const THRESHOLD = 160;
 
 interface SwipeCardProps {
   product: Product;
@@ -17,122 +16,128 @@ interface SwipeCardProps {
 }
 
 export default function SwipeCard({ product, onVote }: SwipeCardProps) {
-  const [dragging, setDragging]         = useState(false);
-  const [offset, setOffset]             = useState(0);
-  const [leaving, setLeaving]           = useState<"left"|"right"|"need"|null>(null);
-  const [holdType, setHoldType]         = useState<HoldType>(null);
-  const [holdProgress, setHoldProgress] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [locked, setLocked] = useState<"left" | "right" | "need" | null>(null);
+  const [leaving, setLeaving] = useState<"left" | "right" | "need" | null>(null);
+  const [pressing, setPressing] = useState(false);
+  const [needPct, setNeedPct] = useState(0);
 
-  const startX       = useRef(0);
-  const cardRef      = useRef<HTMLDivElement>(null);
-  const rafRef       = useRef<number | null>(null);
-  const pressStart   = useRef(0);
-  const didLongPress = useRef(false);
+  const startPos = useRef({ x: 0, y: 0 });
+  const cardRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+  const pressStart = useRef(0);
 
-  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+  useEffect(() => {
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, []);
 
   const triggerVote = useCallback((direction: "left" | "right" | "need") => {
     setLeaving(direction);
-    setHoldType(null);
-    setHoldProgress(0);
+    setNeedPct(0);
+    const duration = direction === "need" ? 600 : 350;
+
     setTimeout(() => {
       onVote(direction === "right" ? 1 : direction === "left" ? -1 : "need");
-      setOffset(0);
+      setOffset({ x: 0, y: 0 });
       setLeaving(null);
-    }, 320);
+      setLocked(null);
+    }, duration);
   }, [onVote]);
 
-  const animateHold = useCallback((type: HoldType) => {
+  function clearPress() {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    setPressing(false);
+    setNeedPct(0);
+  }
+
+  function animateNeed() {
     const tick = () => {
       const pct = Math.min(((Date.now() - pressStart.current) / LONG_PRESS_MS) * 100, 100);
-      setHoldProgress(pct);
-      if (pct < 100) { rafRef.current = requestAnimationFrame(tick); }
-      else {
-        didLongPress.current = true;
-        triggerVote(type === "like" ? "right" : type === "dislike" ? "left" : "need");
+      setNeedPct(pct);
+      if (pct < 100) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        setLocked("need");
+        setPressing(false);
       }
     };
     rafRef.current = requestAnimationFrame(tick);
-  }, [triggerVote]);
-
-  const cancelHold = useCallback(() => {
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    setHoldType(null);
-    setHoldProgress(0);
-  }, []);
+  }
 
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest("a") || (e.target as HTMLElement).closest("button")) return;
+    if (locked) { triggerVote(locked); return; }
     setDragging(true);
-    didLongPress.current = false;
-    startX.current = e.clientX;
-    cardRef.current?.setPointerCapture(e.pointerId);
+    setPressing(true);
+    startPos.current = { x: e.clientX, y: e.clientY };
     pressStart.current = Date.now();
-    setHoldType("need");
-    animateHold("need");
+    cardRef.current?.setPointerCapture(e.pointerId);
+    animateNeed();
   }
 
   function onPointerMove(e: React.PointerEvent) {
-    if (!dragging) return;
-    const dx = e.clientX - startX.current;
-    if (Math.abs(dx) > 10) cancelHold();
-    setOffset(dx);
+    if (!dragging || locked) return;
+    const dx = e.clientX - startPos.current.x;
+    const dy = e.clientY - startPos.current.y;
+    if (Math.abs(dx) > 15 || Math.abs(dy) > 15) clearPress();
+    setOffset({ x: dx, y: dy });
+    if (dx > THRESHOLD) { setLocked("right"); setDragging(false); clearPress(); }
+    else if (dx < -THRESHOLD) { setLocked("left"); setDragging(false); clearPress(); }
   }
 
   function onPointerUp() {
+    clearPress();
+    if (locked) return;
     setDragging(false);
-    cancelHold();
-    if (didLongPress.current) return;
-    if (offset > 80) triggerVote("right");
-    else if (offset < -80) triggerVote("left");
-    else setOffset(0);
+    setOffset({ x: 0, y: 0 });
   }
 
-  function startBtn(type: NonNullable<HoldType>) {
-    didLongPress.current = false;
-    pressStart.current = Date.now();
-    setHoldType(type);
-    animateHold(type);
+  function getTransform() {
+    if (leaving) {
+      if (leaving === "need") return `translate3d(0, -2000px, 0) scale(0) rotate(-10deg)`;
+      const x = leaving === "right" ? 1200 : -1200;
+      return `translate3d(${x}px, 0, 0) rotate(${x / 12}deg) scale(0.5)`;
+    }
+    if (locked) {
+      const x = locked === "left" ? -30 : locked === "right" ? 30 : 0;
+      const y = locked === "need" ? -60 : 0; 
+      const r = locked === "left" ? -8 : locked === "right" ? 8 : 0;
+      return `translate3d(${x}px, ${y}px, 0) rotate(${r}deg) scale(1.04)`;
+    }
+    const scale = pressing ? 0.96 : 1;
+    const needY = -(needPct / 100) * 40; 
+    return `translate3d(${offset.x}px, ${offset.y + needY}px, 0) rotate(${offset.x * 0.04}deg) scale(${scale})`;
   }
-  function endBtn(type: NonNullable<HoldType>) {
-    if (didLongPress.current) return;
-    cancelHold();
-    triggerVote(type === "like" ? "right" : type === "dislike" ? "left" : "need");
-  }
 
-  const rotate     = offset * 0.05;
-  const translateX = leaving === "right" ? 600 : leaving === "left" ? -600 : offset;
-  const translateY = leaving === "need" ? -600 : 0;
-  const isLeaving  = !!leaving;
+  const getTransition = () => {
+    if (dragging) return "none";
+    if (leaving === "need") return "transform 0.7s cubic-bezier(0.5, 0, 1, 0.5), opacity 0.4s";
+    return "transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.25s";
+  };
 
-  const swipeRight = offset > 20;
-  const swipeLeft  = offset < -20;
-
-  // Fills
-  const likeFill    = holdType === "like"    ? holdProgress : (swipeRight || leaving === "right") ? 100 : 0;
-  const dislikeFill = holdType === "dislike" ? holdProgress : (swipeLeft  || leaving === "left")  ? 100 : 0;
-  const needFill    = holdType === "need"    ? holdProgress : leaving === "need" ? 100 : 0;
+  const leftIntensity = Math.min(Math.max(-offset.x / THRESHOLD, 0), 1);
+  const rightIntensity = Math.min(Math.max(offset.x / THRESHOLD, 0), 1);
 
   return (
-    // Ocupa todo el espacio que le da page.tsx, sin scroll
-    <div className="w-full h-full flex flex-col items-center gap-2 px-3 py-2 max-w-md mx-auto">
+    // Contenedor principal usa flex-1 para ocupar el espacio disponible sin desbordar
+    <div className="flex-1 w-full flex items-center justify-center p-4 min-h-0">
+      <div 
+        className="relative w-full max-w-[340px] aspect-[3/4.2]" 
+        style={{ maxHeight: "calc(100vh - 250px)" }} // Garantiza que no choque con headers/footers
+      >
+        {/* SOMBRA */}
+        <div
+          className="absolute inset-0 rounded-[35px] bg-black pointer-events-none"
+          style={{
+            transform: getTransform(),
+            transition: getTransition(),
+            translate: "8px 8px",
+            opacity: leaving ? 0 : 1,
+          }}
+        />
 
-      {/* CARD — flex-1 toma todo el alto disponible */}
-      <div className="relative w-full flex-1 min-h-0">
-
-        {/* Indicadores swipe flotantes */}
-        <div className={cn("absolute left-3 top-1/2 -translate-y-1/2 z-30 transition-opacity duration-150 pointer-events-none", swipeLeft ? "opacity-100" : "opacity-0")}>
-          <div className="bg-black text-white p-2.5 rounded-full">
-            <ThumbsDown size={20} strokeWidth={1.5} />
-          </div>
-        </div>
-        <div className={cn("absolute right-3 top-1/2 -translate-y-1/2 z-30 transition-opacity duration-150 pointer-events-none", swipeRight ? "opacity-100" : "opacity-0")}>
-          <div className="bg-black text-white p-2.5 rounded-full">
-            <ThumbsUp size={20} strokeWidth={1.5} />
-          </div>
-        </div>
-
-        {/* Card draggable — h-full para que ocupe el contenedor */}
+        {/* CARD */}
         <div
           ref={cardRef}
           onPointerDown={onPointerDown}
@@ -140,115 +145,64 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           style={{
-            transform: `translateX(${translateX}px) translateY(${translateY}px) rotate(${rotate}deg)`,
-            transition: dragging ? "none" : "transform 0.45s cubic-bezier(0.2,0.8,0.2,1), opacity 0.25s ease",
-            cursor: dragging ? "grabbing" : "grab",
+            transform: getTransform(),
+            transition: getTransition(),
+            cursor: locked ? "pointer" : dragging ? "grabbing" : "grab",
+            zIndex: 1,
           }}
           className={cn(
-            "w-full h-full bg-white rounded-[28px] overflow-hidden touch-none relative border border-black/10 flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.08)]",
-            isLeaving && "opacity-0"
+            "w-full h-full bg-white rounded-[35px] overflow-hidden touch-none border-[3px] border-black flex flex-col relative shadow-sm",
+            leaving && "opacity-0 pointer-events-none"
           )}
         >
-          {/* Barra de progreso "Lo necesito" arriba */}
-          {needFill > 0 && needFill < 100 && (
-            <div className="absolute top-0 left-0 h-1 bg-foreground z-50 transition-none rounded-full" style={{ width: `${needFill}%` }} />
+          {/* BARRA CARGA */}
+          {needPct > 0 && needPct < 100 && (
+            <div className="absolute top-0 left-0 z-50 h-[8px] bg-black"
+              style={{ width: `${needPct}%` }} />
           )}
 
-          {/* Imagen — 55% del alto */}
-          <div
-            className="relative w-full overflow-hidden flex items-center justify-center p-6"
-            style={{ height: "55%", backgroundColor: product.image_color || "#f5f5f5" }}
-          >
-
-
-            {product.image_url ? (
-              <img src={product.image_url} alt={product.name} className="w-full h-full object-contain pointer-events-none" />
-            ) : (
-              <span className="text-5xl grayscale pointer-events-none">📦</span>
-            )}
+          {/* OVERLAYS (Acá no camina, Lo quiero, Lo necesito) */}
+          <div className="absolute inset-0 z-40 flex flex-col items-center justify-center p-6 gap-4 pointer-events-none"
+            style={{ opacity: locked === "left" ? 1 : leftIntensity, backgroundColor: "#FF70CD" }}>
+            <div className="w-16 h-16 border-[6px] border-black rounded-full flex items-center justify-center bg-white/20">
+               <div className="w-10 h-[6px] bg-black rotate-45" />
+            </div>
+            <h2 className="text-3xl font-[950] tracking-tighter uppercase text-black italic text-center leading-none">Acá no<br/>camina</h2>
           </div>
 
-          {/* Info — resto del alto */}
-          <div className="flex-1 px-5 py-4 flex flex-col justify-between bg-white">
-            <div className="flex flex-col gap-1">
-              {/* Etiquetas en una sola línea */}
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] font-bold text-black/40 uppercase tracking-[0.2em]">{product.category}</span>
-                <span className="text-black/20 text-[9px]">·</span>
-                <span className="text-[9px] font-bold text-black/40 uppercase tracking-[0.2em]">{product.country}</span>
-                <Link
-                  href={`/producto/${product.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="ml-auto w-7 h-7 rounded-full bg-black text-white flex items-center justify-center hover:scale-110 transition-transform"
-                >
-                  <Plus size={15} strokeWidth={2.5} />
-                </Link>
-              </div>
-              <h2 className="text-xl font-black leading-tight tracking-tight text-black uppercase">
-                {product.name}
-              </h2>
-              <p className="text-xs text-black/50 font-medium line-clamp-2 leading-relaxed">
-                {product.description}
-              </p>
+          <div className="absolute inset-0 z-40 flex flex-col items-center justify-center p-6 gap-4 pointer-events-none"
+            style={{ opacity: locked === "right" ? 1 : rightIntensity, backgroundColor: "#D2FF32" }}>
+            <span className="text-7xl animate-bounce">🛒</span>
+            <h2 className="text-3xl font-[950] tracking-tighter uppercase text-black text-center leading-none">¡Lo<br/>quiero!</h2>
+          </div>
+
+          <div className={cn("absolute inset-0 z-40 flex flex-col items-center justify-center p-6 gap-4 pointer-events-none transition-all duration-300 bg-[#2563FF]",
+            locked === "need" ? "opacity-100 scale-100" : "opacity-0 scale-90")}>
+            <span className="text-7xl animate-pulse">✈️</span>
+            <h2 className="text-3xl font-[950] tracking-tighter uppercase text-white text-center italic leading-none">¡Lo<br/>necesito!</h2>
+          </div>
+
+          {/* CONTENIDO SUPERIOR (Imagen) - Reducido un poco para dar aire al texto */}
+          <div className="relative w-full flex items-center justify-center p-8 bg-[#f3f3f3]" style={{ height: "50%" }}>
+            <img src={product.image_url} alt={product.name} className="max-w-full max-h-full object-contain pointer-events-none select-none" />
+          </div>
+
+          {/* INFO INFERIOR - Con flex-grow para asegurar que el DemandMeter esté al final */}
+          <div className="flex-1 px-5 py-5 flex flex-col bg-white border-t-[3px] border-black min-h-0">
+            <div className="flex items-center justify-between mb-2">
+              <span className="px-2.5 py-0.5 border-2 border-black rounded-full text-[9px] font-[900] uppercase bg-gray-50">{product.country}</span>
+              <Link href={`/producto/${product.id}`} onClick={(e) => e.stopPropagation()}
+                className="w-8 h-8 bg-black rounded-full flex items-center justify-center text-white"><Plus size={18} strokeWidth={4} /></Link>
             </div>
-            <div className="border-t border-black/5 pt-3">
+            
+            <h2 className="text-xl font-[950] leading-[1] uppercase mb-1 line-clamp-1">{product.name}</h2>
+            <p className="text-[10px] font-bold text-black/40 leading-tight uppercase line-clamp-2 mb-2">{product.description}</p>
+            
+            <div className="mt-auto pt-2 border-t border-black/5">
               <DemandMeter value={product.demand} market={product.target_market} />
             </div>
           </div>
         </div>
-      </div>
-
-      {/* BOTONES */}
-      <div className="w-full shrink-0 flex items-center justify-between gap-3 px-1 pb-1">
-
-        {/* PASO */}
-        <button
-          onPointerDown={() => startBtn("dislike")}
-          onPointerUp={() => endBtn("dislike")}
-          onPointerLeave={cancelHold}
-          className="w-12 h-12 rounded-full border border-black/15 flex items-center justify-center active:scale-90 overflow-hidden relative transition-colors"
-          style={{
-            background: dislikeFill > 0 ? `linear-gradient(to top, #ef4444 ${dislikeFill}%, white ${dislikeFill}%)` : "white",
-            color: dislikeFill > 60 ? "white" : "#ef4444",
-            borderColor: dislikeFill > 0 ? "#ef4444" : "rgba(0,0,0,0.15)",
-          }}
-        >
-          <ThumbsDown size={18} strokeWidth={1.5} className="relative z-10" />
-        </button>
-
-        {/* LO NECESITO — solo ícono de pausa */}
-        <button
-          onPointerDown={() => startBtn("need")}
-          onPointerUp={() => endBtn("need")}
-          onPointerLeave={cancelHold}
-          className="w-12 h-12 rounded-full border flex items-center justify-center active:scale-95 overflow-hidden relative transition-colors"
-          style={{
-            background: needFill > 0 ? `linear-gradient(to right, #0a0a0a ${needFill}%, white ${needFill}%)` : "white",
-            color: needFill > 50 ? "white" : "#0a0a0a",
-            borderColor: needFill > 0 ? "#0a0a0a" : "rgba(0,0,0,0.15)",
-          }}
-        >
-          {/* Ícono pausa: dos barras verticales */}
-          <svg width="14" height="16" viewBox="0 0 14 16" fill="currentColor" className="relative z-10">
-            <rect x="0" y="0" width="4" height="16" rx="1.5" />
-            <rect x="10" y="0" width="4" height="16" rx="1.5" />
-          </svg>
-        </button>
-
-        {/* QUIERO */}
-        <button
-          onPointerDown={() => startBtn("like")}
-          onPointerUp={() => endBtn("like")}
-          onPointerLeave={cancelHold}
-          className="w-12 h-12 rounded-full border border-black/15 flex items-center justify-center active:scale-90 overflow-hidden relative transition-colors"
-          style={{
-            background: likeFill > 0 ? `linear-gradient(to top, #22c55e ${likeFill}%, white ${likeFill}%)` : "white",
-            color: likeFill > 60 ? "white" : "#22c55e",
-            borderColor: likeFill > 0 ? "#22c55e" : "rgba(0,0,0,0.15)",
-          }}
-        >
-          <ThumbsUp size={18} strokeWidth={1.5} className="relative z-10" />
-        </button>
       </div>
     </div>
   );
