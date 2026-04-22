@@ -25,15 +25,6 @@ export function useAuth() {
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       const newUser = session?.user ?? null;
       setUser(newUser);
-
-      // Cuando el usuario se loguea, adoptar votos anónimos de su sesión
-      if (event === "SIGNED_IN" && newUser) {
-        const sessionId = getSessionId();
-        await supabase.rpc("adopt_anonymous_votes", {
-          p_user_id: newUser.id,
-          p_session_id: sessionId,
-        });
-      }
     });
 
     return () => listener.subscription.unsubscribe();

@@ -8,8 +8,6 @@ import { supabase } from "@/lib/supabase";
 import { Product } from "@/types/index";
 import { useAuth } from "@/hook/useAuth";
 
-const MOCK_IDS = new Set<string>();
-
 function getSessionId() {
   if (typeof window === "undefined") return "ssr";
   let id = localStorage.getItem("session_id");
@@ -25,21 +23,76 @@ export default function HomePage() {
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
-    supabase.from("products").select("*").eq("status", 1).order("created_at", { ascending: false })
-      .then(({ data }) => { if (data?.length) setProducts(data); setLoading(false); });
-  }, []);
+    async function fetchProducts() {
+      let query = supabase
+        .from("products")
+        .select("*")
+        .eq("status", 1)
+        .order("created_at", { ascending: false });
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("country")
+          .eq("id", user.id)
+          .single();
+        if (profile?.country) {
+          query = query.neq("country", profile.country);
+        }
+      }
+
+      const { data } = await query;
+      if (data) setProducts(data);
+      setLoading(false);
+    }
+    fetchProducts();
+  }, [user]);
 
   async function handleVote(value: 1 | -1 | "need") {
     const p = products[index];
     if (!p) return;
+
     const dbValue = value === "need" ? 2 : value;
-    // No intentar guardar votos de productos mock (solo existen en memoria)
-    if (!MOCK_IDS.has(p.id)) {
-      await supabase.from("votes").insert({
-        product_id: p.id, user_id: user?.id ?? null,
-        session_id: getSessionId(), value: dbValue, weight: user ? 1 : 0.3,
-      }).then(({ error }) => { if (error && error.code !== "23505") console.error(error); });
+
+    // Intentar insertar — si ya votó, actualizar el valor existente
+    if (user) {
+      // Usuario registrado: buscar voto existente y actualizar
+      const { data: existing } = await supabase
+        .from("votes")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("product_id", p.id)
+        .single();
+
+      if (existing) {
+        await supabase.from("votes").update({ value: dbValue }).eq("id", existing.id);
+      } else {
+        await supabase.from("votes").insert({
+          product_id: p.id, user_id: user.id,
+          session_id: getSessionId(), value: dbValue, weight: 1,
+        });
+      }
+    } else {
+      // Anónimo: buscar por session_id
+      const sessionId = getSessionId();
+      const { data: existing } = await supabase
+        .from("votes")
+        .select("id")
+        .eq("session_id", sessionId)
+        .eq("product_id", p.id)
+        .is("user_id", null)
+        .single();
+
+      if (existing) {
+        await supabase.from("votes").update({ value: dbValue }).eq("id", existing.id);
+      } else {
+        await supabase.from("votes").insert({
+          product_id: p.id, user_id: null,
+          session_id: sessionId, value: dbValue, weight: 0.3,
+        });
+      }
     }
+
     setVoted(v => [...v, p.id]);
     setIndex(i => i + 1);
   }
@@ -47,27 +100,34 @@ export default function HomePage() {
   const current = products[index];
 
   return (
-    // h-full hereda el calc del main en layout
-    <div className="h-full flex flex-col">
+    <div style={{ height: "calc(100dvh - 40px - 64px)" }} className="flex flex-col overflow-hidden">
       <CategoryTabs />
+      <div className="flex-1 flex overflow-hidden">
 
-      {/* Área restante — CategoryTabs es ~41px */}
-      <div className="flex-1 flex items-center justify-center min-h-0 relative">
+        <div className="hidden md:flex flex-1 items-center justify-end pr-8 relative overflow-hidden">
+          <span aria-hidden className="pointer-events-none select-none absolute left-[-5%] top-1/2 -translate-y-1/2 text-[20vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.05] leading-none">404</span>
+        </div>
 
-        {/* 404 deco desktop */}
-        <span aria-hidden className="hidden md:block pointer-events-none select-none absolute left-4 top-1/2 -translate-y-1/2 text-[14vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.05] leading-none">404</span>
-        <span aria-hidden className="hidden md:block pointer-events-none select-none absolute right-4 bottom-0 text-[12vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.05] leading-none">404</span>
-
-        {loading ? (
-          <div className="w-7 h-7 rounded-full border-2 border-foreground border-t-transparent animate-spin" />
-        ) : current ? (
-          <SwipeCard key={current.id} product={current} onVote={handleVote} />
-        ) : (
-          <div className="text-center px-6">
-            <p className="font-[family-name:var(--font-syne)] font-bold text-2xl mb-2">¡Eso es todo!</p>
-            <p className="text-muted-foreground text-sm">Votaste {voted.length} producto{voted.length !== 1 ? "s" : ""}.</p>
+        <div className="flex items-center justify-center px-4 md:px-8 relative w-full md:w-auto md:min-w-[480px] md:max-w-[560px]">
+          <span aria-hidden className="md:hidden pointer-events-none select-none absolute left-[-3%] top-1/2 -translate-y-1/2 text-[28vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.04] leading-none">404</span>
+          <span aria-hidden className="md:hidden pointer-events-none select-none absolute right-[-4%] bottom-2 text-[22vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.04] leading-none">404</span>
+          <div className="relative z-10 w-full">
+            {loading
+              ? <div className="flex justify-center"><div className="w-7 h-7 rounded-full border-2 border-foreground border-t-transparent animate-spin" /></div>
+              : current
+                ? <SwipeCard key={current.id} product={current} onVote={handleVote} />
+                : <div className="text-center max-w-xs mx-auto">
+                    <p className="font-[family-name:var(--font-syne)] font-bold text-2xl mb-2">¡Eso es todo!</p>
+                    <p className="text-muted-foreground text-sm">Votaste {voted.length} producto{voted.length !== 1 ? "s" : ""}.</p>
+                  </div>
+            }
           </div>
-        )}
+        </div>
+
+        <div className="hidden md:flex flex-1 items-center justify-start pl-8 relative overflow-hidden">
+          <span aria-hidden className="pointer-events-none select-none absolute right-[-5%] bottom-0 text-[18vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.05] leading-none">404</span>
+        </div>
+
       </div>
     </div>
   );
