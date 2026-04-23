@@ -33,7 +33,7 @@ const allTabs = [
     ),
   },
   {
-    label: "Historial", href: "/history", auth: true, // solo logueados
+    label: "Historial", href: "/history", auth: true,
     icon: (a: boolean) => (
       <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={a ? 2 : 1.5} strokeLinecap="round">
         <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 3.5" />
@@ -49,7 +49,7 @@ const allTabs = [
     ),
   },
   {
-    label: "Contacto", href: "/contacto", auth: false,
+    label: "Contacto", href: "/contact", auth: false,
     icon: (a: boolean) => (
       <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={a ? 2 : 1.5} strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -66,7 +66,7 @@ export default function TabBar() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-16">
-      <div className="h-full px-1 flex" style={{ display: "grid", gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
+      <div className="h-full px-1" style={{ display: "grid", gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
         {tabs.map(({ label, href, icon }) => {
           const active = pathname === href;
           return (
