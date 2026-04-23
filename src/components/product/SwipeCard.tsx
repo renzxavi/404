@@ -1,14 +1,15 @@
+// src/components/product/SwipeCard.tsx
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Plus } from "lucide-react";
-import Link from "next/link";
 import { Product } from "@/types/index";
 import { cn } from "@/lib/utils";
 import DemandMeter from "./DemandMeter";
+import ProductDetail from "./ProductDetail";
 
 const LONG_PRESS_MS = 600;
-const THRESHOLD = 160;
+const THRESHOLD = 120;
 
 interface SwipeCardProps {
   product: Product;
@@ -17,32 +18,29 @@ interface SwipeCardProps {
 
 export default function SwipeCard({ product, onVote }: SwipeCardProps) {
   const [dragging, setDragging] = useState(false);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [locked, setLocked] = useState<"left" | "right" | "need" | null>(null);
-  const [leaving, setLeaving] = useState<"left" | "right" | "need" | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [offset, setOffset]     = useState({ x: 0, y: 0 });
+  const [locked, setLocked]     = useState<"left"|"right"|"need"|null>(null);
+  const [leaving, setLeaving]   = useState<"left"|"right"|"need"|null>(null);
   const [pressing, setPressing] = useState(false);
-  const [needPct, setNeedPct] = useState(0);
+  const [needPct, setNeedPct]   = useState(0);
 
-  const startPos = useRef({ x: 0, y: 0 });
-  const cardRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<number | null>(null);
+  const startPos   = useRef({ x: 0, y: 0 });
+  const cardRef    = useRef<HTMLDivElement>(null);
+  const rafRef     = useRef<number | null>(null);
   const pressStart = useRef(0);
 
-  useEffect(() => {
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, []);
+  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
 
-  const triggerVote = useCallback((direction: "left" | "right" | "need") => {
+  const triggerVote = useCallback((direction: "left"|"right"|"need") => {
     setLeaving(direction);
     setNeedPct(0);
-    const duration = direction === "need" ? 600 : 350;
-
     setTimeout(() => {
       onVote(direction === "right" ? 1 : direction === "left" ? -1 : "need");
       setOffset({ x: 0, y: 0 });
       setLeaving(null);
       setLocked(null);
-    }, duration);
+    }, direction === "need" ? 220 : 350);
   }, [onVote]);
 
   function clearPress() {
@@ -55,12 +53,8 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
     const tick = () => {
       const pct = Math.min(((Date.now() - pressStart.current) / LONG_PRESS_MS) * 100, 100);
       setNeedPct(pct);
-      if (pct < 100) {
-        rafRef.current = requestAnimationFrame(tick);
-      } else {
-        setLocked("need");
-        setPressing(false);
-      }
+      if (pct < 100) { rafRef.current = requestAnimationFrame(tick); }
+      else { setLocked("need"); setPressing(false); }
     };
     rafRef.current = requestAnimationFrame(tick);
   }
@@ -80,10 +74,10 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
     if (!dragging || locked) return;
     const dx = e.clientX - startPos.current.x;
     const dy = e.clientY - startPos.current.y;
-    if (Math.abs(dx) > 15 || Math.abs(dy) > 15) clearPress();
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) clearPress();
     setOffset({ x: dx, y: dy });
-    if (dx > THRESHOLD) { setLocked("right"); setDragging(false); clearPress(); }
-    else if (dx < -THRESHOLD) { setLocked("left"); setDragging(false); clearPress(); }
+    if (dx > THRESHOLD) { setLocked("right"); setDragging(false); }
+    else if (dx < -THRESHOLD) { setLocked("left"); setDragging(false); }
   }
 
   function onPointerUp() {
@@ -95,45 +89,51 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
 
   function getTransform() {
     if (leaving) {
-      if (leaving === "need") return `translate3d(0, -2000px, 0) scale(0) rotate(-10deg)`;
-      const x = leaving === "right" ? 1200 : -1200;
-      return `translate3d(${x}px, 0, 0) rotate(${x / 12}deg) scale(0.5)`;
+      const x = leaving === "right" ? 1100 : leaving === "left" ? -1100 : 0;
+      const y = leaving === "need" ? -2500 : 0;
+      return `translate3d(${x}px,${y}px,0) rotate(${leaving === "need" ? -8 : x / 12}deg) scale(${leaving === "need" ? 0.5 : 1})`;
     }
     if (locked) {
-      const x = locked === "left" ? -30 : locked === "right" ? 30 : 0;
-      const y = locked === "need" ? -60 : 0; 
-      const r = locked === "left" ? -8 : locked === "right" ? 8 : 0;
-      return `translate3d(${x}px, ${y}px, 0) rotate(${r}deg) scale(1.04)`;
+      const x = locked === "left" ? -20 : locked === "right" ? 20 : 0;
+      const r = locked === "left" ? -6 : locked === "right" ? 6 : 0;
+      // "need" locked: flota hacia arriba
+      const y = locked === "need" ? -24 : 0;
+      return `translate3d(${x}px,${y}px,0) rotate(${r}deg) scale(1.03)`;
     }
-    const scale = pressing ? 0.96 : 1;
-    const needY = -(needPct / 100) * 40; 
-    return `translate3d(${offset.x}px, ${offset.y + needY}px, 0) rotate(${offset.x * 0.04}deg) scale(${scale})`;
+    const scale = pressing ? 0.97 : 1;
+    // Mientras carga "need", la card sube suavemente
+    const needY = -(needPct / 100) * 18;
+    return `translate3d(${offset.x}px,${offset.y + needY}px,0) rotate(${offset.x * 0.04}deg) scale(${scale})`;
   }
 
-  const getTransition = () => {
-    if (dragging) return "none";
-    if (leaving === "need") return "transform 0.7s cubic-bezier(0.5, 0, 1, 0.5), opacity 0.4s";
-    return "transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.25s";
-  };
+  const leftIntensity  = Math.min(Math.max(-offset.x / THRESHOLD, 0), 1);
+  const rightIntensity = Math.min(Math.max(offset.x  / THRESHOLD, 0), 1);
 
-  const leftIntensity = Math.min(Math.max(-offset.x / THRESHOLD, 0), 1);
-  const rightIntensity = Math.min(Math.max(offset.x / THRESHOLD, 0), 1);
+  // Altura máxima de la card:
+  // 100dvh - navbar(40) - tabbar(64) - categoryTabs(41) - margen(16) = ~439px
+  // En pantallas grandes se limita a 600px
+  const cardMaxH = "min(calc(100dvh - 40px - 64px - 41px - 48px), 460px)";
+  // Ancho máximo proporcional al alto (ratio ~3:4)
+  const cardMaxW = "min(calc((100dvh - 193px) * 0.62), 320px)";
 
   return (
-    // Contenedor principal usa flex-1 para ocupar el espacio disponible sin desbordar
-    <div className="flex-1 w-full flex items-center justify-center p-4 min-h-0">
-      <div 
-        className="relative w-full max-w-[340px] aspect-[3/4.2]" 
-        style={{ maxHeight: "calc(100vh - 250px)" }} // Garantiza que no choque con headers/footers
+    <div className="flex items-center justify-center w-full px-4">
+      {/* Contenedor con tamaño fijo calculado */}
+      <div
+        className="relative"
+        style={{ width: cardMaxW, height: cardMaxH }}
       >
-        {/* SOMBRA */}
+        {/* Sombra neobrutalist */}
         <div
-          className="absolute inset-0 rounded-[35px] bg-black pointer-events-none"
+          className="absolute inset-0 rounded-[32px] bg-black pointer-events-none"
           style={{
             transform: getTransform(),
-            transition: getTransition(),
-            translate: "8px 8px",
+            transition: dragging ? "none" : leaving === "need"
+              ? "transform 0.25s cubic-bezier(0.4,0,0.2,1)"
+              : "transform 0.45s cubic-bezier(0.175,0.885,0.32,1.275)",
+            translate: "6px 6px",
             opacity: leaving ? 0 : 1,
+            zIndex: 0,
           }}
         />
 
@@ -146,64 +146,92 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
           onPointerCancel={onPointerUp}
           style={{
             transform: getTransform(),
-            transition: getTransition(),
+            transition: dragging ? "none" : leaving === "need"
+              ? "transform 0.25s cubic-bezier(0.4,0,0.2,1), opacity 0.2s"
+              : "transform 0.45s cubic-bezier(0.175,0.885,0.32,1.275), opacity 0.25s",
             cursor: locked ? "pointer" : dragging ? "grabbing" : "grab",
+            position: "relative",
             zIndex: 1,
+            width: "100%",
+            height: "100%",
           }}
           className={cn(
-            "w-full h-full bg-white rounded-[35px] overflow-hidden touch-none border-[3px] border-black flex flex-col relative shadow-sm",
-            leaving && "opacity-0 pointer-events-none"
+            "bg-white rounded-[32px] overflow-hidden touch-none border-[3px] border-black flex flex-col",
+            leaving && "opacity-0"
           )}
         >
-          {/* BARRA CARGA */}
+          {/* Barra need */}
           {needPct > 0 && needPct < 100 && (
-            <div className="absolute top-0 left-0 z-50 h-[8px] bg-black"
+            <div className="absolute top-0 left-0 z-50 h-[4px] bg-black rounded-full transition-none"
               style={{ width: `${needPct}%` }} />
           )}
 
-          {/* OVERLAYS (Acá no camina, Lo quiero, Lo necesito) */}
-          <div className="absolute inset-0 z-40 flex flex-col items-center justify-center p-6 gap-4 pointer-events-none"
-            style={{ opacity: locked === "left" ? 1 : leftIntensity, backgroundColor: "#FF70CD" }}>
-            <div className="w-16 h-16 border-[6px] border-black rounded-full flex items-center justify-center bg-white/20">
-               <div className="w-10 h-[6px] bg-black rotate-45" />
-            </div>
-            <h2 className="text-3xl font-[950] tracking-tighter uppercase text-black italic text-center leading-none">Acá no<br/>camina</h2>
+          {/* OVERLAY PASO */}
+          <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 pointer-events-none"
+            style={{ opacity: locked === "left" ? 1 : leftIntensity, backgroundColor: "#FF3CAC" }}>
+            <span className="text-[64px] leading-none" style={{ filter: "drop-shadow(3px 3px 0 black)" }}>🙅</span>
+            <p className="text-3xl font-[950] tracking-tighter uppercase text-white text-center leading-none"
+              style={{ textShadow: "3px 3px 0 black" }}>Acá no<br/>camina</p>
           </div>
 
-          <div className="absolute inset-0 z-40 flex flex-col items-center justify-center p-6 gap-4 pointer-events-none"
-            style={{ opacity: locked === "right" ? 1 : rightIntensity, backgroundColor: "#D2FF32" }}>
-            <span className="text-7xl animate-bounce">🛒</span>
-            <h2 className="text-3xl font-[950] tracking-tighter uppercase text-black text-center leading-none">¡Lo<br/>quiero!</h2>
+          {/* OVERLAY QUIERO */}
+          <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 pointer-events-none"
+            style={{ opacity: locked === "right" ? 1 : rightIntensity, backgroundColor: "#C8F000" }}>
+            <span className="text-[64px] leading-none" style={{ filter: "drop-shadow(3px 3px 0 black)" }}>🛒</span>
+            <p className="text-3xl font-[950] tracking-tighter uppercase text-black text-center leading-none"
+              style={{ textShadow: "2px 2px 0 rgba(0,0,0,0.15)" }}>¡Lo<br/>quiero!</p>
           </div>
 
-          <div className={cn("absolute inset-0 z-40 flex flex-col items-center justify-center p-6 gap-4 pointer-events-none transition-all duration-300 bg-[#2563FF]",
-            locked === "need" ? "opacity-100 scale-100" : "opacity-0 scale-90")}>
-            <span className="text-7xl animate-pulse">✈️</span>
-            <h2 className="text-3xl font-[950] tracking-tighter uppercase text-white text-center italic leading-none">¡Lo<br/>necesito!</h2>
+          {/* OVERLAY NECESITO */}
+          <div className={cn("absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 pointer-events-none transition-opacity duration-300",
+            locked === "need" ? "opacity-100" : "opacity-0")}
+            style={{ backgroundColor: "#2563FF" }}>
+            <span className="text-[64px] leading-none" style={{ filter: "drop-shadow(3px 3px 0 black)" }}>✈️</span>
+            <p className="text-3xl font-[950] tracking-tighter uppercase text-white text-center leading-none"
+              style={{ textShadow: "3px 3px 0 black" }}>¡Lo<br/>necesito!</p>
           </div>
 
-          {/* CONTENIDO SUPERIOR (Imagen) - Reducido un poco para dar aire al texto */}
-          <div className="relative w-full flex items-center justify-center p-8 bg-[#f3f3f3]" style={{ height: "50%" }}>
-            <img src={product.image_url} alt={product.name} className="max-w-full max-h-full object-contain pointer-events-none select-none" />
+          {/* Imagen — 52% del alto de la card */}
+          <div className="relative w-full flex items-center justify-center p-5"
+            style={{ height: "52%", backgroundColor: product.image_color || "#f0f0f0" }}>
+            {product.image_url
+              ? <img src={product.image_url} alt={product.name} className="w-full h-full object-contain pointer-events-none select-none" />
+              : <span className="text-5xl pointer-events-none">📦</span>
+            }
           </div>
 
-          {/* INFO INFERIOR - Con flex-grow para asegurar que el DemandMeter esté al final */}
-          <div className="flex-1 px-5 py-5 flex flex-col bg-white border-t-[3px] border-black min-h-0">
+          {/* Info */}
+          <div className="flex-1 px-5 py-4 flex flex-col bg-white border-t-[3px] border-black overflow-hidden">
             <div className="flex items-center justify-between mb-2">
-              <span className="px-2.5 py-0.5 border-2 border-black rounded-full text-[9px] font-[900] uppercase bg-gray-50">{product.country}</span>
-              <Link href={`/producto/${product.id}`} onClick={(e) => e.stopPropagation()}
-                className="w-8 h-8 bg-black rounded-full flex items-center justify-center text-white"><Plus size={18} strokeWidth={4} /></Link>
+              <div className="flex items-center gap-1.5">
+                <span className="px-2 py-0.5 border-2 border-black rounded-full text-[9px] font-black uppercase tracking-tighter">
+                  {product.country}
+                </span>
+                <span className="text-[9px] font-black text-black/30 uppercase tracking-tighter">
+                  {product.category}
+                </span>
+              </div>
+              <button onClick={(e) => { e.stopPropagation(); setShowDetail(true); }}
+                className="w-7 h-7 bg-black rounded-full flex items-center justify-center text-white hover:scale-110 transition-transform">
+                <Plus size={14} strokeWidth={3} />
+              </button>
             </div>
-            
-            <h2 className="text-xl font-[950] leading-[1] uppercase mb-1 line-clamp-1">{product.name}</h2>
-            <p className="text-[10px] font-bold text-black/40 leading-tight uppercase line-clamp-2 mb-2">{product.description}</p>
-            
-            <div className="mt-auto pt-2 border-t border-black/5">
+            <h2 className="text-xl font-[950] leading-none tracking-tighter uppercase mb-1">
+              {product.name}
+            </h2>
+            <p className="text-[11px] font-bold text-black/40 leading-tight line-clamp-2 uppercase">
+              {product.description}
+            </p>
+            <div className="mt-auto pt-2 border-t-2 border-black/5">
               <DemandMeter value={product.demand} market={product.target_market} />
             </div>
           </div>
         </div>
       </div>
+
+      {showDetail && (
+        <ProductDetail productId={product.id} onClose={() => setShowDetail(false)} />
+      )}
     </div>
   );
 }
