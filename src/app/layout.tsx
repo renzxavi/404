@@ -12,7 +12,7 @@ const syne = Syne({
 });
 
 export const metadata: Metadata = {
-  title: "404 — ¿Por qué no existe acá?",
+  title: "404",
   description: "Descubrí productos del mundo que no llegan a Uruguay.",
 };
 
@@ -21,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" className={syne.variable}>
       <body className="bg-background text-foreground antialiased overflow-hidden" style={{ height: "100dvh" }}>
         <Navbar />
-        <main style={{ height: "calc(100dvh - 40px - 64px)" }}>
+        <main style={{ height: "calc(100dvh - 64px - 64px)", overflowY: "auto" }}>
           {children}
         </main>
         <TabBar />

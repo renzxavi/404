@@ -42,7 +42,30 @@ export default function HomePage() {
       }
 
       const { data } = await query;
-      if (data) setProducts(data);
+      if (!data) { setLoading(false); return; }
+
+      // Filtrar productos ya votados Y productos importados (status=2)
+      let votedIds: string[] = [];
+
+      if (user) {
+        // Con cuenta: buscar por user_id
+        const { data: votes } = await supabase
+          .from("votes")
+          .select("product_id")
+          .eq("user_id", user.id);
+        votedIds = votes?.map(v => v.product_id) ?? [];
+      } else {
+        // Sin cuenta: buscar por session_id
+        const sessionId = getSessionId();
+        const { data: votes } = await supabase
+          .from("votes")
+          .select("product_id")
+          .eq("session_id", sessionId)
+          .is("user_id", null);
+        votedIds = votes?.map(v => v.product_id) ?? [];
+      }
+
+      setProducts(data.filter(p => !votedIds.includes(p.id)));
       setLoading(false);
     }
     fetchProducts();
@@ -99,33 +122,41 @@ export default function HomePage() {
 
   const current = products[index];
 
+
+
   return (
-    <div style={{ height: "calc(100dvh - 40px - 64px)" }} className="flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       <CategoryTabs />
       <div className="flex-1 flex overflow-hidden">
 
-        <div className="hidden md:flex flex-1 items-center justify-end pr-8 relative overflow-hidden">
-          <span aria-hidden className="pointer-events-none select-none absolute left-[-5%] top-1/2 -translate-y-1/2 text-[20vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.05] leading-none">404</span>
+        {/* Desktop izq */}
+        <div className="hidden md:flex flex-1 items-center justify-center relative overflow-hidden">
+          <span aria-hidden className="pointer-events-none select-none text-[18vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.05] leading-none">404</span>
         </div>
 
-        <div className="flex items-center justify-center px-4 md:px-8 relative w-full md:w-auto md:min-w-[480px] md:max-w-[560px]">
+        {/* Centro — en mobile ocupa todo, en desktop max 45% del ancho */}
+        <div className="flex items-center justify-center px-3 relative w-full md:w-[45%] md:max-w-[600px] md:min-w-[400px]">
           <span aria-hidden className="md:hidden pointer-events-none select-none absolute left-[-3%] top-1/2 -translate-y-1/2 text-[28vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.04] leading-none">404</span>
           <span aria-hidden className="md:hidden pointer-events-none select-none absolute right-[-4%] bottom-2 text-[22vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.04] leading-none">404</span>
           <div className="relative z-10 w-full">
-            {loading
-              ? <div className="flex justify-center"><div className="w-7 h-7 rounded-full border-2 border-foreground border-t-transparent animate-spin" /></div>
-              : current
-                ? <SwipeCard key={current.id} product={current} onVote={handleVote} />
-                : <div className="text-center max-w-xs mx-auto">
-                    <p className="font-[family-name:var(--font-syne)] font-bold text-2xl mb-2">¡Eso es todo!</p>
-                    <p className="text-muted-foreground text-sm">Votaste {voted.length} producto{voted.length !== 1 ? "s" : ""}.</p>
-                  </div>
-            }
+            {loading ? (
+              <div className="flex justify-center"><div className="w-7 h-7 rounded-full border-2 border-foreground border-t-transparent animate-spin" /></div>
+            ) : current ? (
+              <SwipeCard key={current.id} product={current} onVote={handleVote} />
+            ) : (
+              <div className="text-center max-w-xs mx-auto">
+                <p className="font-[family-name:var(--font-syne)] font-bold text-2xl mb-2">¡Eso es todo!</p>
+                <p className="text-muted-foreground text-sm">
+                  {voted.length > 0 ? `Votaste ${voted.length} producto${voted.length !== 1 ? "s" : ""}.` : "No hay productos para mostrar."}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="hidden md:flex flex-1 items-center justify-start pl-8 relative overflow-hidden">
-          <span aria-hidden className="pointer-events-none select-none absolute right-[-5%] bottom-0 text-[18vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.05] leading-none">404</span>
+        {/* Desktop der */}
+        <div className="hidden md:flex flex-1 items-center justify-center relative overflow-hidden">
+          <span aria-hidden className="pointer-events-none select-none text-[18vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.05] leading-none">404</span>
         </div>
 
       </div>

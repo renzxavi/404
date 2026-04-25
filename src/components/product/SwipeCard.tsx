@@ -5,10 +5,11 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Plus } from "lucide-react";
 import { Product } from "@/types/index";
 import { cn } from "@/lib/utils";
+import { getCategoryColor } from "@/lib/categories";
 import DemandMeter from "./DemandMeter";
 import ProductDetail from "./ProductDetail";
 
-const LONG_PRESS_MS = 600;
+const LONG_PRESS_MS = 1200;
 const THRESHOLD = 120;
 
 interface SwipeCardProps {
@@ -54,14 +55,16 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
       const pct = Math.min(((Date.now() - pressStart.current) / LONG_PRESS_MS) * 100, 100);
       setNeedPct(pct);
       if (pct < 100) { rafRef.current = requestAnimationFrame(tick); }
-      else { setLocked("need"); setPressing(false); }
+      else {
+        setPressing(false);
+        triggerVote("need");
+      }
     };
     rafRef.current = requestAnimationFrame(tick);
   }
 
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest("a") || (e.target as HTMLElement).closest("button")) return;
-    if (locked) { triggerVote(locked); return; }
     setDragging(true);
     setPressing(true);
     startPos.current = { x: e.clientX, y: e.clientY };
@@ -71,20 +74,26 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
   }
 
   function onPointerMove(e: React.PointerEvent) {
-    if (!dragging || locked) return;
+    if (!dragging) return;
     const dx = e.clientX - startPos.current.x;
     const dy = e.clientY - startPos.current.y;
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) clearPress();
     setOffset({ x: dx, y: dy });
-    if (dx > THRESHOLD) { setLocked("right"); setDragging(false); }
-    else if (dx < -THRESHOLD) { setLocked("left"); setDragging(false); }
   }
 
   function onPointerUp() {
+    // Si ya se disparó el need (leaving activo), no hacer nada
+    if (leaving) return;
     clearPress();
-    if (locked) return;
     setDragging(false);
-    setOffset({ x: 0, y: 0 });
+    const dx = offset.x;
+    if (dx > THRESHOLD) {
+      triggerVote("right");
+    } else if (dx < -THRESHOLD) {
+      triggerVote("left");
+    } else {
+      setOffset({ x: 0, y: 0 });
+    }
   }
 
   function getTransform() {
@@ -93,15 +102,7 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
       const y = leaving === "need" ? -2500 : 0;
       return `translate3d(${x}px,${y}px,0) rotate(${leaving === "need" ? -8 : x / 12}deg) scale(${leaving === "need" ? 0.5 : 1})`;
     }
-    if (locked) {
-      const x = locked === "left" ? -20 : locked === "right" ? 20 : 0;
-      const r = locked === "left" ? -6 : locked === "right" ? 6 : 0;
-      // "need" locked: flota hacia arriba
-      const y = locked === "need" ? -24 : 0;
-      return `translate3d(${x}px,${y}px,0) rotate(${r}deg) scale(1.03)`;
-    }
     const scale = pressing ? 0.97 : 1;
-    // Mientras carga "need", la card sube suavemente
     const needY = -(needPct / 100) * 18;
     return `translate3d(${offset.x}px,${offset.y + needY}px,0) rotate(${offset.x * 0.04}deg) scale(${scale})`;
   }
@@ -109,15 +110,15 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
   const leftIntensity  = Math.min(Math.max(-offset.x / THRESHOLD, 0), 1);
   const rightIntensity = Math.min(Math.max(offset.x  / THRESHOLD, 0), 1);
 
-  // Altura máxima de la card:
-  // 100dvh - navbar(40) - tabbar(64) - categoryTabs(41) - margen(16) = ~439px
-  // En pantallas grandes se limita a 600px
-  const cardMaxH = "min(calc(100dvh - 40px - 64px - 41px - 48px), 460px)";
-  // Ancho máximo proporcional al alto (ratio ~3:4)
-  const cardMaxW = "min(calc((100dvh - 193px) * 0.62), 320px)";
+  // Mobile: se ajusta al alto disponible
+  const cardMaxH = "min(calc(100dvh - 40px - 64px - 52px - 56px), 440px)";
+  const cardMaxW = "min(calc((100dvh - 188px) * 0.75), 100%)";
 
   return (
-    <div className="flex items-center justify-center w-full px-4">
+    <div className="flex items-center justify-center w-full h-full px-4 md:px-16 relative py-4">
+      {/* 404 deco desktop */}
+      <span aria-hidden className="hidden md:block pointer-events-none select-none absolute left-4 top-1/2 -translate-y-1/2 text-[12vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.05] leading-none">404</span>
+      <span aria-hidden className="hidden md:block pointer-events-none select-none absolute right-4 bottom-0 text-[10vw] font-[family-name:var(--font-syne)] font-extrabold text-foreground/[0.05] leading-none">404</span>
       {/* Contenedor con tamaño fijo calculado */}
       <div
         className="relative"
@@ -183,17 +184,16 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
           </div>
 
           {/* OVERLAY NECESITO */}
-          <div className={cn("absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 pointer-events-none transition-opacity duration-300",
-            locked === "need" ? "opacity-100" : "opacity-0")}
-            style={{ backgroundColor: "#2563FF" }}>
+          <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 pointer-events-none transition-opacity duration-200"
+            style={{ backgroundColor: "#2563FF", opacity: leaving === "need" || needPct >= 50 ? 1 : 0 }}>
             <span className="text-[64px] leading-none" style={{ filter: "drop-shadow(3px 3px 0 black)" }}>✈️</span>
             <p className="text-3xl font-[950] tracking-tighter uppercase text-white text-center leading-none"
               style={{ textShadow: "3px 3px 0 black" }}>¡Lo<br/>necesito!</p>
           </div>
 
-          {/* Imagen — 52% del alto de la card */}
+          {/* Imagen — fondo del color de la categoría */}
           <div className="relative w-full flex items-center justify-center p-5"
-            style={{ height: "52%", backgroundColor: product.image_color || "#f0f0f0" }}>
+            style={{ height: "52%", backgroundColor: getCategoryColor(product.category).bg }}>
             {product.image_url
               ? <img src={product.image_url} alt={product.name} className="w-full h-full object-contain pointer-events-none select-none" />
               : <span className="text-5xl pointer-events-none">📦</span>
@@ -203,11 +203,24 @@ export default function SwipeCard({ product, onVote }: SwipeCardProps) {
           {/* Info */}
           <div className="flex-1 px-5 py-4 flex flex-col bg-white border-t-[3px] border-black overflow-hidden">
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <span className="px-2 py-0.5 border-2 border-black rounded-full text-[9px] font-black uppercase tracking-tighter">
-                  {product.country}
-                </span>
-                <span className="text-[9px] font-black text-black/30 uppercase tracking-tighter">
+              <div className="flex items-center gap-1.5 min-w-0">
+                {product.created_by ? (
+                  <span className="px-2 py-0.5 rounded-full font-black uppercase tracking-tighter bg-[#2563FF] text-white shrink-0"
+                    style={{ fontSize: "clamp(7px, 1.8vw, 9px)" }}>
+                    {product.created_by.slice(0, 8)}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 border-2 border-black rounded-full font-black uppercase tracking-tighter bg-white text-black shrink-0"
+                    style={{ fontSize: "clamp(7px, 1.8vw, 9px)" }}>
+                    Anónimo
+                  </span>
+                )}
+                <span className="font-black uppercase tracking-tighter px-2 py-0.5 rounded-full truncate"
+                  style={{
+                    fontSize: "clamp(7px, 1.8vw, 9px)",
+                    backgroundColor: getCategoryColor(product.category).bg,
+                    color: getCategoryColor(product.category).text,
+                  }}>
                   {product.category}
                 </span>
               </div>

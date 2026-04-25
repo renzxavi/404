@@ -13,7 +13,10 @@ const TYPES = [
   { value: "other",          label: "Otro" },
 ];
 
-export default function ContactoPage() {
+const inputStyle = "w-full rounded-2xl border-[2.5px] border-black bg-white px-4 py-3 text-sm font-bold outline-none focus:bg-black/5 transition-all placeholder:text-black/30";
+const labelStyle = "text-[9px] font-black uppercase tracking-widest mb-2 block";
+
+export default function ContactPage() {
   const { user } = useAuth();
   const [type, setType]       = useState("");
   const [message, setMessage] = useState("");
@@ -27,10 +30,7 @@ export default function ContactoPage() {
     setLoading(true);
     setError("");
     const { error: err } = await supabase.from("contacts").insert({
-      type,
-      message,
-      email: email || null,
-      user_id: user?.id ?? null,
+      type, message, email: email || null, user_id: user?.id ?? null,
     });
     if (err) { setError(err.message); setLoading(false); return; }
     setSent(true);
@@ -39,83 +39,76 @@ export default function ContactoPage() {
 
   if (sent) return (
     <div className="h-full flex flex-col items-center justify-center gap-4 px-6 text-center">
-      <CheckCircle2 size={48} className="text-green-500" />
-      <div>
-        <h2 className="font-[family-name:var(--font-syne)] font-bold text-xl mb-1">¡Mensaje enviado!</h2>
-        <p className="text-sm text-muted-foreground">Te respondemos a la brevedad.</p>
+      <div className="relative">
+        <div className="absolute inset-0 rounded-full bg-black" style={{ translate: "4px 4px" }} />
+        <div className="relative w-16 h-16 rounded-full border-[3px] border-black bg-[#C8F000] flex items-center justify-center">
+          <CheckCircle2 size={28} strokeWidth={2.5} />
+        </div>
       </div>
-      <button
-        onClick={() => { setSent(false); setType(""); setMessage(""); }}
-        className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
-      >
-        Enviar otro
-      </button>
+      <div>
+        <h2 className="font-[family-name:var(--font-syne)] font-black text-xl mb-1 uppercase tracking-tighter">¡Mensaje enviado!</h2>
+        <p className="text-xs font-bold text-black/50 uppercase tracking-wider">Te respondemos a la brevedad.</p>
+      </div>
+      <div className="relative mt-2">
+        <div className="absolute inset-0 rounded-2xl bg-black" style={{ translate: "3px 3px" }} />
+        <button onClick={() => { setSent(false); setType(""); setMessage(""); }}
+          className="relative border-[2.5px] border-black rounded-2xl px-6 py-2.5 text-[9px] font-black uppercase tracking-widest bg-white hover:bg-black/5 transition-colors">
+          Enviar otro
+        </button>
+      </div>
     </div>
   );
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-sm mx-auto px-6 py-8">
-        <h1 className="font-[family-name:var(--font-syne)] font-bold text-2xl mb-8">Contacto</h1>
+    <div className="h-full overflow-y-auto flex items-start justify-center px-4 py-6">
+      <div className="relative w-full max-w-sm">
+        <div className="absolute inset-0 rounded-[32px] bg-black" style={{ translate: "6px 6px" }} />
+        <div className="relative bg-white rounded-[32px] border-[3px] border-black overflow-hidden">
+          {/* Header */}
 
-        <div className="flex flex-col gap-5">
-          {/* Tipo */}
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 block">
-              Tipo <span className="text-destructive">*</span>
-            </label>
-            <div className="relative">
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-sm outline-none focus:ring-2 focus:ring-foreground/10 appearance-none cursor-pointer"
-              >
-                <option value="">Seleccioná un tipo...</option>
-                {TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+          <div className="px-6 py-5 flex flex-col gap-4">
+            {/* Tipo */}
+            <div>
+              <label className={labelStyle}>Tipo <span className="text-[#FF3CAC]">*</span></label>
+              <div className="relative">
+                <select value={type} onChange={(e) => setType(e.target.value)}
+                  className={`${inputStyle} appearance-none cursor-pointer pr-8`}>
+                  <option value="">Seleccioná un tipo...</option>
+                  {TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <ChevronDown size={16} strokeWidth={3} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Mensaje */}
+            <div>
+              <label className={labelStyle}>Mensaje <span className="text-[#FF3CAC]">*</span></label>
+              <textarea value={message} onChange={(e) => setMessage(e.target.value)}
+                placeholder="Escribí tu mensaje..." rows={5}
+                className={`${inputStyle} resize-none`} />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className={labelStyle}>Tu email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="para poder responderte" className={inputStyle} />
+            </div>
+
+            {error && (
+              <div className="border-[2.5px] border-[#FF3CAC] bg-[#FF3CAC]/10 p-3 rounded-2xl">
+                <p className="text-xs font-black text-[#FF3CAC] text-center uppercase tracking-wider">{error}</p>
+              </div>
+            )}
+
+            <div className="relative mt-1">
+              <div className="absolute inset-0 rounded-2xl bg-black" style={{ translate: "4px 4px" }} />
+              <button onClick={handleSubmit} disabled={loading}
+                className="relative w-full rounded-2xl bg-black text-white py-4 text-[9px] font-black uppercase tracking-[0.2em] hover:opacity-80 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2 border-[2.5px] border-black">
+                {loading ? <><Loader2 size={14} className="animate-spin" /> Enviando...</> : "Enviar mensaje"}
+              </button>
             </div>
           </div>
-
-          {/* Mensaje */}
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 block">
-              Mensaje <span className="text-destructive">*</span>
-            </label>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Escribí tu mensaje..."
-              rows={5}
-              className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-sm outline-none focus:ring-2 focus:ring-foreground/10 resize-none"
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 block">
-              Tu email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="para poder responderte"
-              className="w-full rounded-2xl border border-border bg-card px-4 py-3.5 text-sm outline-none focus:ring-2 focus:ring-foreground/10"
-            />
-          </div>
-
-          {error && <p className="text-xs text-destructive text-center">{error}</p>}
-
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="w-full rounded-2xl bg-foreground text-background font-bold uppercase tracking-widest py-4 text-sm hover:opacity-80 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {loading ? <><Loader2 size={16} className="animate-spin" /> Enviando...</> : "Enviar mensaje"}
-          </button>
         </div>
       </div>
     </div>
